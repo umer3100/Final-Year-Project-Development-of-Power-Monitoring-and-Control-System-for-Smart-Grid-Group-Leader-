@@ -1,0 +1,172 @@
+#include "ZMPT101B.h"
+#include <SoftwareSerial.h>
+#include <math.h>
+
+
+#define pushButton_pin1 10
+#define pushButton_pin2 11
+#define pushButton_pin3 12
+
+#define Load1 2
+#define Load2 3
+#define Load3 4
+#define PF_Correction 4
+
+#define MainRelay 8
+
+ZMPT101B voltageSensor(A0);
+ZMPT101B voltageSensor1(A1);
+
+float Voltage, Voltage1;
+
+unsigned int  Amp = 0, abc = 0;
+
+float pulsewidth = 0;
+float powerfactor = 0;
+float phase = 0;
+float avg_pf = 0;
+float avg_phase = 0;
+
+SoftwareSerial Connection (7, 13); //RxTx
+
+float A = 0.0;
+float Amp1 = 0.0;
+int intAmp1 = 0;
+String stringAmp1 = "";
+String stringU = "";
+String stringU3 = "";
+int avg_pf1 = 1;
+String stringavg_pf1 = "";
+
+
+void setup()
+
+{
+  Serial.begin(19200);
+  Connection.begin(9600);
+  pinMode(Load1, OUTPUT);
+  pinMode(Load2, OUTPUT);
+  pinMode(Load3, OUTPUT);
+  pinMode(MainRelay, OUTPUT);
+
+  digitalWrite(Load1, HIGH);
+  digitalWrite(Load2, HIGH);
+  digitalWrite(Load3, HIGH);
+  digitalWrite(MainRelay, HIGH);
+
+  pinMode(pushButton_pin1, INPUT_PULLUP);
+  pinMode(pushButton_pin2, INPUT_PULLUP);
+  pinMode(pushButton_pin3, INPUT_PULLUP);
+
+  delay(100);
+
+  Serial.println("Calibrating... Ensure that no current flows through the sensor at this moment");
+  delay(100);
+  voltageSensor.calibrate();
+  delay(100);
+  voltageSensor1.calibrate();
+  delay(100);
+  Serial.println("Done!");
+
+}
+
+void loop() {
+  checkpin();
+  int L1 = digitalRead(Load1);
+  int L2 = digitalRead(Load2);
+  int L3 = digitalRead(Load3);
+
+
+
+  Amp = analogRead(A2);
+  Serial.println(Amp);
+  for (int i = 0; i < 150; i++)
+  {
+    Amp = analogRead(A2);
+    if (Amp > abc)
+    {
+      abc = Amp;
+    }
+
+  }
+  Serial.println(abc);
+  Serial.print("I: ");
+  A = float ((abc - 3) * 0.003);
+  abc = 0;
+  Serial.println(A);
+  delay(500);
+
+
+
+  float U1 = voltageSensor.getVoltageAC();
+  float U = U1 * 80;
+  //    if (U<100){
+  //      U = 0;
+  //    }
+  Serial.println(String("VLoad = ") + U + " V");
+  delay(1000);
+
+  float U2 = voltageSensor1.getVoltageAC();
+  float U3 = U2 * 80;
+  //  if (U3 < 100) {
+  //    U3 = 0;
+  //  }
+  Serial.println(String("Vinput = ") + U3 + " V");
+
+  for (int i = 0; i < 100; i++)
+  {
+    pulsewidth = pulseIn(6, HIGH);
+    phase = 2 * 180 * 50 * pulsewidth / 1000000;
+    powerfactor = cos(phase * 3.1415 / 180);
+    avg_pf += powerfactor;
+    avg_phase += phase;
+  }
+  avg_pf /= 100;
+  avg_phase /= 100;
+  Serial.print("PW: ");
+  Serial.print(avg_phase);
+  Serial.print("\t");
+  Serial.print("PF: ");
+  Serial.println(avg_pf);
+  
+  delay(100);
+
+
+  stringU = U;
+  stringU3 = U3;
+//  Amp1 = A * 1000;
+  stringAmp1 = A;
+  avg_pf1 = avg_pf * 100;
+  stringavg_pf1 = avg_pf1;
+  String Data = "Data:"+stringU3+ "," +stringU+ ";"+stringAmp1+ "?"+stringavg_pf1+ "@";
+  Serial.println(Data);
+  Connection.println(Data);
+  delay(1000);
+
+  if(U3<205 || U3>235){
+    digitalWrite(MainRelay, LOW);
+  }
+  else{
+    digitalWrite(MainRelay, HIGH);
+  }
+  avg_pf = 0;
+  avg_phase = 0;
+}
+
+void checkpin()  //checks board input status
+{
+  if (digitalRead(pushButton_pin1) == LOW) {
+    digitalWrite(Load1, !digitalRead(Load1));
+    while (digitalRead(pushButton_pin1) == LOW) {}
+  }
+
+  if (digitalRead(pushButton_pin2) == LOW) {
+    digitalWrite(Load2, !digitalRead(Load2));
+    while (digitalRead(pushButton_pin2) == LOW) {}
+  }
+
+  if (digitalRead(pushButton_pin3) == LOW) {
+    digitalWrite(Load3, !digitalRead(Load3));
+    while (digitalRead(pushButton_pin3) == LOW) {}
+  }
+}
